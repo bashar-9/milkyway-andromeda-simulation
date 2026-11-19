@@ -6,7 +6,7 @@ export interface HudCallbacks {
   onCycleSpeed: () => void;
   onSeekTime: (timeGyr: number) => void;
   onCycleFocus: () => void;
-  onToggleCinema: () => void;
+  onToggleDirector: () => void;
   onResetCamera: () => void;
 }
 
@@ -46,7 +46,7 @@ export class MinimalHud {
   private readonly tickEls: Array<{ el: HTMLElement; timeGyr: number }> = [];
 
   private readonly focusBtn: HTMLButtonElement;
-  private readonly cinemaBtn: HTMLButtonElement;
+  private readonly directorBtn: HTMLButtonElement;
   private readonly resetBtn: HTMLButtonElement;
   private readonly hideBtn: HTMLButtonElement;
   private readonly restoreChip: HTMLButtonElement;
@@ -165,11 +165,11 @@ export class MinimalHud {
     this.focusBtn.textContent = 'COM';
     this.focusBtn.addEventListener('click', callbacks.onCycleFocus);
 
-    this.cinemaBtn = document.createElement('button');
-    this.cinemaBtn.className = 'hud-btn active';
-    this.cinemaBtn.title = 'Toggle Cinema Orbit (C)';
-    this.cinemaBtn.textContent = 'Cinema';
-    this.cinemaBtn.addEventListener('click', callbacks.onToggleCinema);
+    this.directorBtn = document.createElement('button');
+    this.directorBtn.className = 'hud-btn active';
+    this.directorBtn.title = "Toggle Director's Camera (D)";
+    this.directorBtn.textContent = 'Director';
+    this.directorBtn.addEventListener('click', callbacks.onToggleDirector);
 
     this.resetBtn = document.createElement('button');
     this.resetBtn.className = 'hud-btn icon-only';
@@ -189,7 +189,7 @@ export class MinimalHud {
       this.trackWrap,
       div1,
       this.focusBtn,
-      this.cinemaBtn,
+      this.directorBtn,
       this.resetBtn,
       this.hideBtn,
     );
@@ -218,8 +218,8 @@ export class MinimalHud {
     this.focusBtn.textContent = focus;
   }
 
-  public setCinema(enabled: boolean): void {
-    this.cinemaBtn.classList.toggle('active', enabled);
+  public setDirector(enabled: boolean): void {
+    this.directorBtn.classList.toggle('active', enabled);
   }
 
   public toggleHudVisibility(): boolean {

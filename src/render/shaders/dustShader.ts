@@ -44,9 +44,10 @@ void main() {
   float weight = attr.z;
 
   float projPx = (baseSizeKpc * uFocalLength) / dist;
-  gl_PointSize = clamp(projPx, 2.0, 140.0);
+  gl_PointSize = clamp(projPx, 2.0, 68.0);
 
   float nearFade = smoothstep(3.5, 16.0, dist);
+  float closeSoften = mix(0.45, 1.0, smoothstep(20.0, 130.0, dist));
   float subScale = clamp(projPx / gl_PointSize, 0.25, 1.0);
 
   // Soften far-side dust passing behind the bright golden bulge so near-side
@@ -69,7 +70,7 @@ void main() {
   vAngle = velMag2D > 1e-3 ? atan(mvVel.y, mvVel.x) : attr.w * 6.283185;
   vStretch = clamp(velMag2D / 290.0, 0.0, 0.72);
 
-  vOpacity = clamp(weight * nearFade * subScale * farSideSoften * diskMask * 0.19, 0.0, 0.48);
+  vOpacity = clamp(weight * nearFade * closeSoften * subScale * farSideSoften * diskMask * 0.19, 0.0, 0.48);
   vSeed = attr.w * 59.3;
 }
 `;

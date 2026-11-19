@@ -119,7 +119,7 @@ function bootstrap(): void {
     canvas,
     window.innerWidth / Math.max(1, window.innerHeight),
     {
-      onCinemaChanged: (enabled) => hud.setCinema(enabled),
+      onDirectorChanged: (enabled) => hud.setDirector(enabled),
       onFocusChanged: (focus) => hud.setFocus(focus),
     },
   );
@@ -230,8 +230,8 @@ function bootstrap(): void {
     onCycleFocus: () => {
       cinemaCamera.cycleFocus();
     },
-    onToggleCinema: () => {
-      cinemaCamera.toggleCinemaDrift();
+    onToggleDirector: () => {
+      cinemaCamera.toggleDirectorMode();
     },
     onResetCamera: () => {
       cinemaCamera.reset();
@@ -267,6 +267,7 @@ function bootstrap(): void {
 
     if (msg.type === 'restored') {
       workerInFlight = false;
+      if (simMode === 'approach') return;
       advect.restoreCheckpoint(msg.slot);
       advect.uploadOctree(msg.treePosMass, msg.treeMeta, msg.nodeCount);
       nbodyStepIndex = msg.stepIndex;
@@ -293,6 +294,8 @@ function bootstrap(): void {
 
     if (msg.type === 'stepped') {
       workerInFlight = false;
+
+      if (simMode === 'approach') return;
 
       // If user initiated a scrub restore while this step was in flight, discard and restore cleanly
       if (pendingRestoreSlice !== null) {
@@ -332,6 +335,15 @@ function bootstrap(): void {
         } else {
           if (simMode === 'boot_preroll') {
             hud.setBootReady();
+            if (cinemaCamera.isDirectorMode()) {
+              cinemaCamera.snapToDirector(
+                currentTimeGyr,
+                mwCenter,
+                m31Center,
+                sepKpc,
+                performance.now() * 0.001,
+              );
+            }
           }
           seekTargetStep = null;
           simMode = 'nbody';
@@ -370,8 +382,8 @@ function bootstrap(): void {
       cinemaCamera.reset();
     } else if (key === 'h') {
       hud.toggleHudVisibility();
-    } else if (key === 'c') {
-      cinemaCamera.toggleCinemaDrift();
+    } else if (key === 'c' || key === 'd') {
+      cinemaCamera.toggleDirectorMode();
     } else if (key === '1') {
       cinemaCamera.setFocus('COM');
     } else if (key === '2') {
@@ -414,14 +426,23 @@ function bootstrap(): void {
       }
     }
 
-    cinemaCamera.update(dtSec, mwCenter, m31Center);
+    const isSeeking = simMode === 'seeking' || simMode === 'boot_preroll';
+    cinemaCamera.update(
+      dtSec,
+      currentTimeGyr,
+      mwCenter,
+      m31Center,
+      sepKpc,
+      nowMs * 0.001,
+      isSeeking,
+    );
     cinemaRenderer.render(cinemaCamera.camera, mwCenter, m31Center, sepKpc);
     hud.update(
       currentTimeGyr,
       Math.max(maxCachedTimeGyr, currentTimeGyr),
       sepKpc,
       relSpeedKms,
-      simMode === 'seeking' || simMode === 'boot_preroll',
+      isSeeking,
     );
   }
 

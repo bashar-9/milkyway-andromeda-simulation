@@ -47,10 +47,11 @@ void main() {
   int popType = packedType - (packedType / 10) * 10;
 
   float projPx = (baseSizeKpc * uFocalLength) / dist;
-  gl_PointSize = clamp(projPx, 2.5, 195.0);
+  gl_PointSize = clamp(projPx, 2.5, 92.0);
 
-  // Smooth fade when camera flies right inside a cloud
+  // Smooth fade when camera flies right inside a cloud + soft close-up attenuation
   float nearFade = smoothstep(3.0, 14.0, dist);
+  float closeSoften = mix(0.48, 1.0, smoothstep(20.0, 130.0, dist));
   // Energy conservation if cloud expands beyond clamp or becomes tiny
   float subScale = clamp(projPx / gl_PointSize, 0.25, 1.0);
 
@@ -64,12 +65,12 @@ void main() {
   if (popType == 5) {
     // H-II emission nebula: surges vivid crimson/cyan during tidal shock starburst
     col = mix(col, vec3(1.0, 0.14, 0.46), clamp(starburst * 0.45, 0.0, 0.65));
-    vAlpha = nearFade * subScale * lum * (0.045 + 0.11 * starburst);
+    vAlpha = nearFade * closeSoften * subScale * lum * (0.045 + 0.11 * starburst);
     vIsHII = 1.0;
   } else {
     // Soft volumetric gas / unresolved stellar continuum
     col = mix(col, vec3(0.28, 0.64, 1.0), clamp(starburst * 0.45, 0.0, 0.65));
-    vAlpha = nearFade * subScale * lum * (0.011 + 0.022 * starburst);
+    vAlpha = nearFade * closeSoften * subScale * lum * (0.011 + 0.022 * starburst);
     vIsHII = 0.0;
   }
 

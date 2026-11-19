@@ -61,7 +61,7 @@ void main() {
   float starburst = posData.w;
 
   float rawPx = (baseSizeKpc * uFocalLength) / dist;
-  float clampedPx = clamp(rawPx, 1.35, 26.0);
+  float clampedPx = clamp(rawPx, 1.35, 14.0);
   gl_PointSize = clampedPx;
 
   // Sub-pixel energy conservation eliminates twinkling/shimmering during motion
