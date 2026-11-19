@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "verify-physics": "tsx src/physics/verifyPhysics.ts"
+    "verify-physics": "tsx src/physics/verifyPhysics.ts",
+    "export-video": "node scripts/export-video.mjs"
   },
   "dependencies": {
     "three": "^0.174.0"

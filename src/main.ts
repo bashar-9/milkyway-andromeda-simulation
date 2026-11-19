@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CinemaCamera } from './camera/CinemaCamera.ts';
+import { parseExportConfig, runOfflineExport } from './export/OfflineExporter.ts';
 import { GpuParticleAdvect } from './gpu/GpuParticleAdvect.ts';
 import { generateVisualParticles } from './gpu/visualParticles.ts';
 import { getApproachState } from './physics/approachOrbit.ts';
@@ -41,11 +42,27 @@ function bootstrap(): void {
   const hudRoot = document.getElementById('hud-root') as HTMLElement | null;
   if (!canvas || !hudRoot) throw new Error('Missing #sim-canvas or #hud-root');
 
+  const exportCfg = parseExportConfig(window.location.search);
+
+  if (exportCfg) {
+    const reportEarlyError = (err: unknown): void => {
+      const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      void fetch('/error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: message,
+      }).catch(() => {});
+    };
+    window.addEventListener('error', (e) => reportEarlyError(e.error ?? e.message));
+    window.addEventListener('unhandledrejection', (e) => reportEarlyError(e.reason));
+  }
+
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: false,
     powerPreference: 'high-performance',
     alpha: false,
+    preserveDrawingBuffer: exportCfg !== null,
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -118,15 +135,31 @@ function bootstrap(): void {
   const cinemaCamera = new CinemaCamera(
     canvas,
     window.innerWidth / Math.max(1, window.innerHeight),
-    {
-      onDirectorChanged: (enabled) => hud.setDirector(enabled),
-      onFocusChanged: (focus) => hud.setFocus(focus),
-    },
+    exportCfg
+      ? undefined
+      : {
+          onDirectorChanged: (enabled) => hud.setDirector(enabled),
+          onFocusChanged: (focus) => hud.setFocus(focus),
+        },
   );
 
   const worker = new Worker(new URL('./physics/nbodyWorker.ts', import.meta.url), {
     type: 'module',
   });
+
+  if (exportCfg) {
+    hudRoot.style.display = 'none';
+    void runOfflineExport({
+      renderer,
+      canvas,
+      advect,
+      cinemaRenderer,
+      cinemaCamera,
+      worker,
+      config: exportCfg,
+    });
+    return;
+  }
 
   function sendWorker(msg: WorkerInMessage): void {
     worker.postMessage(msg);

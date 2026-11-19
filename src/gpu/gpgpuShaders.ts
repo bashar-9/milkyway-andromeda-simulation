@@ -185,3 +185,20 @@ void main() {
   outVel = texelFetch(uVelArray, ivec3(coord, uSlice), 0);
 }
 `;
+
+export const GPGPU_INTERP_FRAG = /* glsl */ `
+precision highp float;
+
+uniform sampler2D uPrevPosTex;
+uniform sampler2D uCurrPosTex;
+uniform float uAlpha;
+
+out vec4 outPos;
+
+void main() {
+  ivec2 coord = ivec2(gl_FragCoord.xy);
+  vec4 p0 = texelFetch(uPrevPosTex, coord, 0);
+  vec4 p1 = texelFetch(uCurrPosTex, coord, 0);
+  outPos = mix(p0, p1, uAlpha);
+}
+`;

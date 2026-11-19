@@ -17,6 +17,7 @@ import {
   GPGPU_ADVECT_FRAG,
   GPGPU_APPROACH_FRAG,
   GPGPU_INIT_FRAG,
+  GPGPU_INTERP_FRAG,
   GPGPU_QUAD_VERT,
   GPGPU_RESTORE_FRAG,
 } from './gpgpuShaders.ts';
@@ -97,6 +98,9 @@ export class GpuParticleAdvect {
   private readonly initMat: THREE.RawShaderMaterial;
   private readonly advectMat: THREE.RawShaderMaterial;
   private readonly approachMat: THREE.RawShaderMaterial;
+  private readonly interpRT: THREE.WebGLRenderTarget;
+  private readonly interpMat: THREE.RawShaderMaterial;
+  private interpAlpha = 1.0;
 
   // Native WebGL2 3D texture arrays for zero-copy VRAM checkpoints
   private readonly posArrayTex: WebGLTexture;
@@ -211,6 +215,32 @@ export class GpuParticleAdvect {
       depthWrite: false,
     });
 
+    this.interpRT = new THREE.WebGLRenderTarget(VIS_TEX_W, VIS_TEX_H, {
+      type: THREE.FloatType,
+      format: THREE.RGBAFormat,
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+      wrapS: THREE.ClampToEdgeWrapping,
+      wrapT: THREE.ClampToEdgeWrapping,
+      generateMipmaps: false,
+      depthBuffer: false,
+      stencilBuffer: false,
+    });
+
+    this.interpMat = new THREE.RawShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      vertexShader: GPGPU_QUAD_VERT,
+      fragmentShader: GPGPU_INTERP_FRAG,
+      uniforms: {
+        uPrevPosTex: { value: this.rtA.textures[0] },
+        uCurrPosTex: { value: this.rtB.textures[0] },
+        uAlpha: { value: 1.0 },
+      },
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.NoBlending,
+    });
+
     this.quadScene = new THREE.Scene();
     this.quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     const quadGeom = new THREE.PlaneGeometry(2, 2);
@@ -298,16 +328,35 @@ export class GpuParticleAdvect {
   }
 
   public get posTexture(): THREE.Texture {
-    return this.activeRT.textures[0];
+    return this.interpAlpha < 0.9999 ? this.interpRT.texture : this.activeRT.textures[0];
   }
 
   public get velTexture(): THREE.Texture {
     return this.activeRT.textures[1];
   }
 
+  public setInterpolatedPos(alpha: number): void {
+    if (alpha >= 0.9999) {
+      this.interpAlpha = 1.0;
+      return;
+    }
+
+    const prevRT = this.renderer.getRenderTarget();
+    this.interpMat.uniforms.uPrevPosTex.value = this.inactiveRT.textures[0];
+    this.interpMat.uniforms.uCurrPosTex.value = this.activeRT.textures[0];
+    this.interpMat.uniforms.uAlpha.value = alpha;
+
+    this.quadMesh.material = this.interpMat;
+    this.renderer.setRenderTarget(this.interpRT);
+    this.renderer.render(this.quadScene, this.quadCamera);
+    this.renderer.setRenderTarget(prevRT);
+    this.interpAlpha = alpha;
+  }
+
   public resetToHandoff(): void {
     const prevRT = this.renderer.getRenderTarget();
     this.activeIdx = 0;
+    this.interpAlpha = 1.0;
     this.quadMesh.material = this.initMat;
     this.renderer.setRenderTarget(this.rtA);
     this.renderer.render(this.quadScene, this.quadCamera);
@@ -350,6 +399,7 @@ export class GpuParticleAdvect {
     this.renderer.setRenderTarget(prevRT);
 
     this.activeIdx = 1 - this.activeIdx;
+    this.interpAlpha = 1.0;
   }
 
   public setApproachState(
@@ -371,6 +421,7 @@ export class GpuParticleAdvect {
     this.renderer.setRenderTarget(this.activeRT);
     this.renderer.render(this.quadScene, this.quadCamera);
     this.renderer.setRenderTarget(prevRT);
+    this.interpAlpha = 1.0;
   }
 
   public saveCheckpoint(slice: number): void {
@@ -449,12 +500,14 @@ export class GpuParticleAdvect {
 
     this.renderer.setRenderTarget(prevRT);
     this.renderer.resetState();
+    this.interpAlpha = 1.0;
   }
 
   public dispose(): void {
     const gl = this.gl;
     this.rtA.dispose();
     this.rtB.dispose();
+    this.interpRT.dispose();
     this.initPosTex.dispose();
     this.initVelTex.dispose();
     this.staticAttrTexture.dispose();
@@ -465,6 +518,7 @@ export class GpuParticleAdvect {
     this.initMat.dispose();
     this.advectMat.dispose();
     this.approachMat.dispose();
+    this.interpMat.dispose();
     this.quadMesh.geometry.dispose();
     gl.deleteTexture(this.posArrayTex);
     gl.deleteTexture(this.velArrayTex);
