@@ -105,10 +105,22 @@ function parseArgs(argv) {
 function findBrowserExecutable() {
   const candidates = [
     process.env.CHROME_PATH,
+    // Windows
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    // macOS
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    // Linux
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/microsoft-edge',
+    '/snap/bin/chromium',
   ].filter(Boolean);
 
   for (const candidate of candidates) {
@@ -117,7 +129,7 @@ function findBrowserExecutable() {
     }
   }
   throw new Error(
-    `Could not locate Chrome or Edge executable. Checked:\n${candidates.join('\n')}`,
+    `Could not locate Chrome, Chromium, or Edge executable (set CHROME_PATH to override). Checked:\n${candidates.join('\n')}`,
   );
 }
 

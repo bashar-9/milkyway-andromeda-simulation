@@ -2,6 +2,26 @@
   "name": "milkyway-andromeda-simulation",
   "version": "1.0.0",
   "private": true,
+  "description": "Real-time 3D WebGL2 N-body simulation of the Milky Way and Andromeda collision with GPGPU particle advection",
+  "license": "MIT",
+  "author": "Bashar",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bashar-9/milkyway-andromeda-simulation.git"
+  },
+  "keywords": [
+    "n-body",
+    "simulation",
+    "threejs",
+    "webgl2",
+    "gpgpu",
+    "astrophysics",
+    "milky-way",
+    "andromeda"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
