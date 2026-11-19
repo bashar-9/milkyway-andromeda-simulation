@@ -2,15 +2,18 @@ import * as THREE from 'three';
 import { CinemaCamera } from '../camera/CinemaCamera.ts';
 import { GpuParticleAdvect } from '../gpu/GpuParticleAdvect.ts';
 import { getApproachState } from '../physics/approachOrbit.ts';
-import { DT, T_HANDOFF, T_MAX, Vec3 } from '../physics/constants.ts';
+import { DT, T_HANDOFF, T_INITIAL_VIEW, T_MAX, Vec3 } from '../physics/constants.ts';
 import { WorkerInMessage, WorkerOutMessage } from '../physics/nbodyWorker.ts';
 import { CinemaRenderer } from '../render/CinemaRenderer.ts';
+
+export const DEFAULT_EXPORT_START_GYR = T_INITIAL_VIEW;
 
 export interface ExportConfig {
   width: number;
   height: number;
   fps: number;
   gyrPerSec: number;
+  startGyr: number;
   testFrames: number | null;
 }
 
@@ -34,6 +37,12 @@ function parsePositiveInt(raw: string | null, fallback: number): number {
   return Math.max(1, Math.round(parsePositiveNumber(raw, fallback)));
 }
 
+function parseStartGyr(raw: string | null, fallback: number): number {
+  if (raw === null) return fallback;
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= 0 && v < T_MAX ? v : fallback;
+}
+
 export function parseExportConfig(search: string): ExportConfig | null {
   const params = new URLSearchParams(search);
   if (params.get('export') !== '1') return null;
@@ -52,6 +61,7 @@ export function parseExportConfig(search: string): ExportConfig | null {
     height: parsePositiveInt(params.get('h'), 1080),
     fps: parsePositiveInt(params.get('fps'), 60),
     gyrPerSec: parsePositiveNumber(params.get('gyrPerSec'), 0.12),
+    startGyr: parseStartGyr(params.get('startGyr'), DEFAULT_EXPORT_START_GYR),
     testFrames,
   };
 }
@@ -98,7 +108,24 @@ export async function runOfflineExport(opts: OfflineExportOptions): Promise<void
     }
 
     const maxNbodySteps = Math.round((T_MAX - T_HANDOFF) / DT);
-    const fullTotalFrames = approachFrames + 1 + maxNbodySteps * subSteps;
+    let startApproachFrame = approachFrames;
+    let startStep = 0;
+    let fullTotalFrames: number;
+
+    if (config.startGyr >= T_HANDOFF) {
+      startStep = Math.round((config.startGyr - T_HANDOFF) / DT);
+      if (Math.abs(T_HANDOFF + startStep * DT - config.startGyr) > 1e-6) {
+        throw new Error(`startGyr=${config.startGyr} must align to an N-body step of DT=${DT}`);
+      }
+      fullTotalFrames = 1 + (maxNbodySteps - startStep) * subSteps;
+    } else {
+      startApproachFrame = Math.round(config.startGyr / dtGyr);
+      if (Math.abs(startApproachFrame * dtGyr - config.startGyr) > 1e-6) {
+        throw new Error(`startGyr=${config.startGyr} must align to dtGyr=${dtGyr}`);
+      }
+      fullTotalFrames = (approachFrames - startApproachFrame) + 1 + maxNbodySteps * subSteps;
+    }
+
     const targetFrames = config.testFrames
       ? Math.min(config.testFrames, fullTotalFrames)
       : fullTotalFrames;
@@ -170,14 +197,14 @@ export async function runOfflineExport(opts: OfflineExportOptions): Promise<void
     let frameIdx = 0;
     const frameDtSec = 1.0 / config.fps;
 
-    // Phase 1: Analytic RK4 Approach (T = 0.000 -> 2.598 Gyr)
-    for (let f = 0; f < approachFrames && frameIdx < targetFrames; f++) {
+    // Phase 1: Analytic RK4 Approach (when startGyr < T_HANDOFF)
+    for (let f = startApproachFrame; f < approachFrames && frameIdx < targetFrames; f++) {
       const t = f * dtGyr;
       const st = getApproachState(t);
       advect.setApproachState(t, st.mwPos, st.mwVel, st.m31Pos, st.m31Vel);
 
-      if (f === 0) {
-        cinemaCamera.snapToDirector(0.0, st.mwPos, st.m31Pos, st.separationKpc, 0.0);
+      if (frameIdx === 0) {
+        cinemaCamera.snapToDirector(t, st.mwPos, st.m31Pos, st.separationKpc, 0.0);
       } else {
         cinemaCamera.update(
           frameDtSec,
@@ -206,21 +233,38 @@ export async function runOfflineExport(opts: OfflineExportOptions): Promise<void
         sepKpc: inited.sepKpc,
       };
 
-      // Exact handoff frame (step = 0, T = T_HANDOFF)
-      cinemaCamera.update(
-        frameDtSec,
-        T_HANDOFF,
-        prev.mwCenter,
-        prev.m31Center,
-        prev.sepKpc,
-        frameIdx * frameDtSec,
-        false,
-      );
+      for (let step = 1; step <= startStep; step++) {
+        const msg = await stepWorker(step);
+        const kickDt = gpuIsHalfShifted ? DT : 0.5 * DT;
+        advect.step(kickDt, DT, DT, !gpuIsHalfShifted);
+        gpuIsHalfShifted = true;
+        advect.uploadOctree(msg.treePosMass, msg.treeMeta, msg.nodeCount);
+        prev = {
+          timeGyr: msg.timeGyr,
+          mwCenter: msg.mwCenter,
+          m31Center: msg.m31Center,
+          sepKpc: msg.sepKpc,
+        };
+      }
+
+      if (frameIdx === 0) {
+        cinemaCamera.snapToDirector(prev.timeGyr, prev.mwCenter, prev.m31Center, prev.sepKpc, 0.0);
+      } else {
+        cinemaCamera.update(
+          frameDtSec,
+          prev.timeGyr,
+          prev.mwCenter,
+          prev.m31Center,
+          prev.sepKpc,
+          frameIdx * frameDtSec,
+          false,
+        );
+      }
       cinemaRenderer.render(cinemaCamera.camera, prev.mwCenter, prev.m31Center, prev.sepKpc);
-      await captureAndSend(frameIdx, T_HANDOFF);
+      await captureAndSend(frameIdx, prev.timeGyr);
       frameIdx++;
 
-      for (let step = 1; step <= maxNbodySteps && frameIdx < targetFrames; step++) {
+      for (let step = startStep + 1; step <= maxNbodySteps && frameIdx < targetFrames; step++) {
         const msg = await stepWorker(step);
         const kickDt = gpuIsHalfShifted ? DT : 0.5 * DT;
         advect.step(kickDt, DT, DT, !gpuIsHalfShifted);

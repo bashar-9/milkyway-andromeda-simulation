@@ -1,5 +1,5 @@
 import { CameraFocus } from '../camera/CinemaCamera.ts';
-import { EPOCH_MARKERS, T_MAX } from '../physics/constants.ts';
+import { EPOCH_MARKERS, T_INITIAL_VIEW, T_MAX } from '../physics/constants.ts';
 
 export interface HudCallbacks {
   onTogglePlay: () => void;
@@ -112,10 +112,12 @@ export class MinimalHud {
 
     rail.append(this.cachedBar, this.fillBar, this.thumbEl);
 
+    const timelineSpan = Math.max(1e-4, T_MAX - T_INITIAL_VIEW);
+
     for (const marker of EPOCH_MARKERS) {
       const tick = document.createElement('div');
       tick.className = 'epoch-tick';
-      const pct = (marker.timeGyr / T_MAX) * 100;
+      const pct = ((marker.timeGyr - T_INITIAL_VIEW) / timelineSpan) * 100;
       tick.style.left = `${pct}%`;
 
       const dot = document.createElement('div');
@@ -138,7 +140,7 @@ export class MinimalHud {
     const seekFromPointer = (clientX: number): void => {
       const rect = this.trackWrap.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
-      callbacks.onSeekTime(ratio * T_MAX);
+      callbacks.onSeekTime(T_INITIAL_VIEW + ratio * timelineSpan);
     };
 
     this.trackWrap.addEventListener('pointerdown', (e) => {
@@ -236,8 +238,12 @@ export class MinimalHud {
     relSpeedKms: number,
     isSeeking: boolean,
   ): void {
-    const pct = Math.max(0, Math.min(100, (timeGyr / T_MAX) * 100));
-    const cachedPct = Math.max(0, Math.min(100, (maxCachedTimeGyr / T_MAX) * 100));
+    const timelineSpan = Math.max(1e-4, T_MAX - T_INITIAL_VIEW);
+    const pct = Math.max(0, Math.min(100, ((timeGyr - T_INITIAL_VIEW) / timelineSpan) * 100));
+    const cachedPct = Math.max(
+      0,
+      Math.min(100, ((maxCachedTimeGyr - T_INITIAL_VIEW) / timelineSpan) * 100),
+    );
 
     this.fillBar.style.width = `${pct.toFixed(3)}%`;
     this.cachedBar.style.width = `${cachedPct.toFixed(3)}%`;

@@ -124,7 +124,7 @@ function bootstrap(): void {
 
   let seekTargetStep: number | null = BOOT_TARGET_STEP;
   let pendingRestoreSlice: number | null = null;
-  let maxCachedTimeGyr = T_HANDOFF;
+  let maxCachedTimeGyr = T_INITIAL_VIEW;
   const cachedSlices = new Map<number, number>(); // slice -> stepIndex
 
   let mwCenter: Vec3 = [...handoff.mwPos];
@@ -194,29 +194,15 @@ function bootstrap(): void {
   }
 
   function handleSeek(targetTimeGyr: number): void {
-    const tClamped = Math.max(0.0, Math.min(T_MAX, targetTimeGyr));
+    const tClamped = Math.max(T_INITIAL_VIEW, Math.min(T_MAX, targetTimeGyr));
     nbodyTimeDebt = 0;
-
-    if (tClamped <= T_HANDOFF) {
-      seekTargetStep = null;
-      pendingRestoreSlice = null;
-      simMode = 'approach';
-      currentTimeGyr = tClamped;
-      const st = getApproachState(tClamped);
-      advect.setApproachState(tClamped, st.mwPos, st.mwVel, st.m31Pos, st.m31Vel);
-      mwCenter = st.mwPos;
-      m31Center = st.m31Pos;
-      sepKpc = st.separationKpc;
-      relSpeedKms = st.relSpeedKms;
-      return;
-    }
 
     const targetStep = Math.min(
       MAX_NBODY_STEPS,
-      Math.max(0, Math.round((tClamped - T_HANDOFF) / DT)),
+      Math.max(BOOT_TARGET_STEP, Math.round((tClamped - T_HANDOFF) / DT)),
     );
     const bestSlice = findBestCachedSlice(targetStep);
-    const bestSliceStep = cachedSlices.get(bestSlice) ?? 0;
+    const bestSliceStep = cachedSlices.get(bestSlice) ?? BOOT_TARGET_STEP;
 
     if (
       (simMode === 'nbody' || simMode === 'seeking' || simMode === 'boot_preroll') &&
@@ -250,7 +236,7 @@ function bootstrap(): void {
   const hud = new MinimalHud(hudRoot, {
     onTogglePlay: () => {
       if (!playing && currentTimeGyr >= T_MAX - 1e-4) {
-        handleSeek(0.0);
+        handleSeek(T_INITIAL_VIEW);
       }
       playing = !playing;
       hud.setPlaying(playing);
@@ -281,7 +267,7 @@ function bootstrap(): void {
       advect.resetToHandoff();
       advect.saveCheckpoint(0);
       cachedSlices.set(0, 0);
-      maxCachedTimeGyr = T_HANDOFF;
+      maxCachedTimeGyr = T_INITIAL_VIEW;
 
       nbodyStepIndex = 0;
       currentTimeGyr = msg.timeGyr;
@@ -291,7 +277,7 @@ function bootstrap(): void {
       sepKpc = msg.sepKpc;
       relSpeedKms = msg.relSpeedKms;
 
-      // Kick off rapid boot pre-roll from T=2.60 -> T=2.96 Gyr
+      // Kick off rapid boot pre-roll from T=2.60 -> T_INITIAL_VIEW (2.84 Gyr)
       if (seekTargetStep !== null && nbodyStepIndex < seekTargetStep) {
         requestStep();
       }
@@ -350,8 +336,9 @@ function bootstrap(): void {
       sepKpc = msg.sepKpc;
       relSpeedKms = msg.relSpeedKms;
 
-      if (msg.stepIndex % CHECKPOINT_STEP_STRIDE === 0) {
-        const slice = Math.floor(msg.stepIndex / CHECKPOINT_STEP_STRIDE);
+      const relStep = msg.stepIndex - BOOT_TARGET_STEP;
+      if (relStep >= 0 && relStep % CHECKPOINT_STEP_STRIDE === 0) {
+        const slice = Math.floor(relStep / CHECKPOINT_STEP_STRIDE);
         if (slice < CHECKPOINT_SLICE_COUNT) {
           advect.saveCheckpoint(slice);
           sendWorker({ type: 'saveCheckpoint', slot: slice });
@@ -407,7 +394,7 @@ function bootstrap(): void {
     if (e.code === 'Space') {
       e.preventDefault();
       if (!playing && currentTimeGyr >= T_MAX - 1e-4) {
-        handleSeek(0.0);
+        handleSeek(T_INITIAL_VIEW);
       }
       playing = !playing;
       hud.setPlaying(playing);

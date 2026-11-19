@@ -14,6 +14,7 @@ const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const DT = 0.004;
 const T_HANDOFF = 2.60;
 const T_MAX = 7.5;
+const DEFAULT_START_GYR = 2.84;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -33,6 +34,7 @@ function parseArgs(argv) {
     height: 1080,
     fps: 60,
     gyrPerSec: 0.12,
+    startGyr: DEFAULT_START_GYR,
     crf: 15,
     preset: 'slow',
     testFrames: null,
@@ -64,6 +66,9 @@ function parseArgs(argv) {
       case 'gyr-per-sec':
         opts.gyrPerSec = parseFloat(val);
         break;
+      case 'start-gyr':
+        opts.startGyr = parseFloat(val);
+        break;
       case 'crf':
         opts.crf = parseInt(val, 10);
         break;
@@ -83,6 +88,9 @@ function parseArgs(argv) {
   if (!Number.isInteger(opts.fps) || opts.fps <= 0) throw new Error(`Invalid --fps: ${opts.fps}`);
   if (!Number.isFinite(opts.gyrPerSec) || opts.gyrPerSec <= 0) {
     throw new Error(`Invalid --gyr-per-sec: ${opts.gyrPerSec}`);
+  }
+  if (!Number.isFinite(opts.startGyr) || opts.startGyr < 0 || opts.startGyr >= T_MAX) {
+    throw new Error(`Invalid --start-gyr: ${opts.startGyr}`);
   }
   if (!Number.isInteger(opts.crf) || opts.crf < 0 || opts.crf > 51) {
     throw new Error(`Invalid --crf: ${opts.crf}`);
@@ -156,7 +164,20 @@ async function main() {
   }
 
   const maxNbodySteps = Math.round((T_MAX - T_HANDOFF) / DT);
-  const fullTotalFrames = approachFrames + 1 + maxNbodySteps * subSteps;
+  let fullTotalFrames;
+  if (opts.startGyr >= T_HANDOFF) {
+    const startStep = Math.round((opts.startGyr - T_HANDOFF) / DT);
+    if (Math.abs(T_HANDOFF + startStep * DT - opts.startGyr) > 1e-6) {
+      throw new Error(`start-gyr (${opts.startGyr}) must align to DT=${DT}`);
+    }
+    fullTotalFrames = 1 + (maxNbodySteps - startStep) * subSteps;
+  } else {
+    const startApproachFrame = Math.round(opts.startGyr / dtGyr);
+    if (Math.abs(startApproachFrame * dtGyr - opts.startGyr) > 1e-6) {
+      throw new Error(`start-gyr (${opts.startGyr}) must align to dtGyr=${dtGyr}`);
+    }
+    fullTotalFrames = (approachFrames - startApproachFrame) + 1 + maxNbodySteps * subSteps;
+  }
   const totalFrames = opts.testFrames ? Math.min(opts.testFrames, fullTotalFrames) : fullTotalFrames;
   const expectedBytesPerFrame = opts.width * opts.height * 4;
 
@@ -400,6 +421,7 @@ async function main() {
     h: String(opts.height),
     fps: String(opts.fps),
     gyrPerSec: String(opts.gyrPerSec),
+    startGyr: String(opts.startGyr),
   });
   if (opts.testFrames !== null) {
     query.set('testFrames', String(opts.testFrames));

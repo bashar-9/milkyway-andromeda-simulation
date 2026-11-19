@@ -245,7 +245,7 @@ export const REL_VEL0_VIEW: Vec3 = [
 // Simulation timing & particle counts
 export const T_HANDOFF = 2.60;       // Gyr: handoff from analytic RK4 approach to full N-body (~385 kpc sep)
 export const T_MAX = 7.5;            // Gyr: full merger into Milkomeda
-export const T_INITIAL_VIEW = 3.12;  // Gyr: initial view after quick boot pre-roll (~255 kpc sep)
+export const T_INITIAL_VIEW = 2.84;  // Gyr: settled N-body start (~330 kpc sep, 60 leapfrog steps past handoff)
 export const DT = 0.004;             // Gyr (4.0 Myr per leapfrog step)
 
 // Macro N-body counts (must sum to N_MACRO = 6144)
@@ -290,7 +290,6 @@ export interface EpochMarker {
 
 // Calibrated directly from verifyPhysics.ts emergent N-body epochs
 export const EPOCH_MARKERS: EpochMarker[] = [
-  { id: 'today', label: 'Today', timeGyr: 0.0 },
   { id: 'impact1', label: '1st Impact', timeGyr: 3.82 },
   { id: 'tails', label: 'Tidal Tails', timeGyr: 4.43 },
   { id: 'impact2', label: '2nd Impact', timeGyr: 5.29 },

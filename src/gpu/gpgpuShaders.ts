@@ -132,7 +132,8 @@ void main() {
   float omega = colData.w;
 
   float dt = uTimeGyr - uTHandoff;
-  float angle = omega * dt;
+  float patternOmega = isM31 ? 19.0 : 23.0;
+  float angle = (omega > 1e-4 ? patternOmega : 0.0) * dt;
   float c = cos(angle);
   float s = sin(angle);
 
